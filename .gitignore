@@ -40,3 +40,7 @@ out/
 
 ### VS Code ###
 .vscode/
+
+*.html
+nginx/html/*
+!nginx/html/.gitkeep

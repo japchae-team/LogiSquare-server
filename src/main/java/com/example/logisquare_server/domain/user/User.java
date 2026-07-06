@@ -3,6 +3,8 @@ package com.example.logisquare_server.domain.user;
 import com.example.logisquare_server.domain.common.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -21,8 +23,8 @@ public class User extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 80)
-    private String username;
+    @Column(name = "login_id", nullable = false, unique = true, length = 80)
+    private String loginId;
 
     @Column(nullable = false)
     private String password;
@@ -30,14 +32,15 @@ public class User extends BaseTimeEntity {
     @Column(nullable = false, length = 80)
     private String name;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private String role;
+    private UserRole role;
 
     @Column(nullable = false)
     private Boolean active = true;
 
-    public User(String username, String password, String name, String role, Boolean active) {
-        this.username = username;
+    public User(String loginId, String password, String name, UserRole role, Boolean active) {
+        this.loginId = loginId;
         this.password = password;
         this.name = name;
         this.role = role;

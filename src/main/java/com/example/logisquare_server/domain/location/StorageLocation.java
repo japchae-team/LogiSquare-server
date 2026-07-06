@@ -3,6 +3,8 @@ package com.example.logisquare_server.domain.location;
 import com.example.logisquare_server.domain.common.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -21,8 +23,9 @@ public class StorageLocation extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "area_code", length = 50)
-    private String areaCode;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "area_code", length = 10)
+    private AreaCode areaCode;
 
     @Column(nullable = false, unique = true, length = 50)
     private String code;
@@ -30,8 +33,9 @@ public class StorageLocation extends BaseTimeEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(name = "location_grade", length = 30)
-    private String locationGrade;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "location_grade", length = 10)
+    private StorageGrade locationGrade;
 
     @Column(name = "location_type", length = 50)
     private String locationType;
@@ -51,10 +55,10 @@ public class StorageLocation extends BaseTimeEntity {
     private Boolean active = true;
 
     public StorageLocation(
-            String areaCode,
+            AreaCode areaCode,
             String code,
             String name,
-            String locationGrade,
+            StorageGrade locationGrade,
             String locationType,
             Boolean dangerArea,
             Integer posX,

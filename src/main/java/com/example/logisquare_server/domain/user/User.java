@@ -33,7 +33,7 @@ public class User extends BaseTimeEntity {
     private String name;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
+    @Column(nullable = false, columnDefinition = "ENUM('ADMIN','USER')")
     private UserRole role;
 
     @Column(nullable = false)

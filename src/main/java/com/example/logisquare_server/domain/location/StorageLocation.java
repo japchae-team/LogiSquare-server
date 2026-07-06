@@ -24,7 +24,7 @@ public class StorageLocation extends BaseTimeEntity {
     private Long id;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "area_code", length = 10)
+    @Column(name = "area_code", columnDefinition = "ENUM('A','B','C')")
     private AreaCode areaCode;
 
     @Column(nullable = false, unique = true, length = 50)
@@ -34,7 +34,7 @@ public class StorageLocation extends BaseTimeEntity {
     private String name;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "location_grade", length = 10)
+    @Column(name = "location_grade", columnDefinition = "ENUM('A','B','C')")
     private StorageGrade locationGrade;
 
     @Column(name = "location_type", length = 50)

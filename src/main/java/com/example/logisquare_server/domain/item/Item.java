@@ -33,7 +33,7 @@ public class Item extends BaseTimeEntity {
     private String category;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "rotation_grade", length = 10)
+    @Column(name = "rotation_grade", columnDefinition = "ENUM('A','B','C')")
     private RotationGrade rotationGrade;
 
     @Column(name = "default_unit_qty", nullable = false)

@@ -2,10 +2,12 @@ package com.example.logisquare_server.auth.service;
 
 import com.example.logisquare_server.auth.dto.TaskActionResponse;
 import com.example.logisquare_server.auth.exception.TaskCallException;
+import com.example.logisquare_server.domain.inbound.InboundRecord;
 import com.example.logisquare_server.domain.inventory.Inventory;
 import com.example.logisquare_server.domain.location.StorageLocation;
 import com.example.logisquare_server.domain.task.TaskAssignment;
 import com.example.logisquare_server.domain.task.WorkTask;
+import com.example.logisquare_server.repository.InboundRecordRepository;
 import com.example.logisquare_server.repository.InventoryRepository;
 import com.example.logisquare_server.repository.TaskAssignmentRepository;
 import com.example.logisquare_server.repository.WorkTaskRepository;
@@ -16,18 +18,23 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TaskAssignmentActionService {
 
+    private static final String COMPLETED_INBOUND_STATUS = "COMPLETED";
+
     private final TaskAssignmentRepository taskAssignmentRepository;
     private final WorkTaskRepository workTaskRepository;
     private final InventoryRepository inventoryRepository;
+    private final InboundRecordRepository inboundRecordRepository;
 
     public TaskAssignmentActionService(
             TaskAssignmentRepository taskAssignmentRepository,
             WorkTaskRepository workTaskRepository,
-            InventoryRepository inventoryRepository
+            InventoryRepository inventoryRepository,
+            InboundRecordRepository inboundRecordRepository
     ) {
         this.taskAssignmentRepository = taskAssignmentRepository;
         this.workTaskRepository = workTaskRepository;
         this.inventoryRepository = inventoryRepository;
+        this.inboundRecordRepository = inboundRecordRepository;
     }
 
     @Transactional
@@ -67,6 +74,7 @@ public class TaskAssignmentActionService {
         task.complete(now);
         assignment.complete(now);
         reflectInventory(task, now);
+        createInboundRecord(task, assignment, now);
 
         return toResponse(assignment, assignment.getRespondedAt(), now);
     }
@@ -100,6 +108,17 @@ public class TaskAssignmentActionService {
                 )));
 
         inventory.addQuantity(task.getQuantity(), movedAt);
+    }
+
+    private void createInboundRecord(WorkTask task, TaskAssignment assignment, LocalDateTime receivedAt) {
+        inboundRecordRepository.save(new InboundRecord(
+                task.getItem(),
+                task.getQuantity(),
+                task.getTargetLocation(),
+                assignment.getWorker().getUser(),
+                COMPLETED_INBOUND_STATUS,
+                receivedAt
+        ));
     }
 
     private TaskActionResponse toResponse(

@@ -2,6 +2,7 @@ package com.example.logisquare_server.repository;
 
 import com.example.logisquare_server.domain.location.StorageLocation;
 import com.example.logisquare_server.domain.location.StorageGrade;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -28,6 +29,8 @@ public interface StorageLocationRepository extends JpaRepository<StorageLocation
             @Param("locationGrade") StorageGrade locationGrade,
             @Param("quantity") Integer quantity
     );
+
+    List<StorageLocation> findAllByActiveTrueOrderByPosYDescPosXAscCodeAsc();
 
     Optional<StorageLocation> findByCode(String code);
 

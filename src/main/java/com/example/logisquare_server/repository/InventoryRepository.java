@@ -9,6 +9,10 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
 
     Optional<Inventory> findByItemIdAndStorageLocationId(Long itemId, Long storageLocationId);
 
+    List<Inventory> findAllByQuantityGreaterThan(Integer quantity);
+
+    List<Inventory> findAllByItemNameContainingIgnoreCaseAndQuantityGreaterThan(String itemName, Integer quantity);
+
     List<Inventory> findAllByItemId(Long itemId);
 
     List<Inventory> findAllByStorageLocationId(Long storageLocationId);

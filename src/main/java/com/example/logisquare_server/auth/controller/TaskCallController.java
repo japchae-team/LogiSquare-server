@@ -37,8 +37,13 @@ public class TaskCallController {
         return ResponseEntity.ok(workerAssignmentService.getMyCalls(authorization, workerId));
     }
 
-    @PostMapping("/{taskId}/call")
-    public ResponseEntity<TaskCallResponse> callWorker(@PathVariable Long taskId) {
-        return ResponseEntity.ok(taskCallService.callWorker(taskId));
+    @PostMapping("/{taskId}/outbound-call")
+    public ResponseEntity<TaskCallResponse> callOutboundWorker(@PathVariable Long taskId) {
+        return ResponseEntity.ok(taskCallService.callOutboundWorker(taskId));
+    }
+
+    @PostMapping("/{taskId}/inbound-call")
+    public ResponseEntity<List<TaskCallResponse>> callInboundWorkers(@PathVariable Long taskId) {
+        return ResponseEntity.ok(taskCallService.callInboundWorkers(taskId));
     }
 }

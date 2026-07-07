@@ -10,6 +10,8 @@ public interface WorkerRepository extends JpaRepository<Worker, Long> {
 
     long countByStatusIn(Collection<String> statuses);
 
+    List<Worker> findAllByStatusIn(Collection<String> statuses);
+
     List<Worker> findTop5ByStatusInOrderByEmployeeNoAsc(Collection<String> statuses);
 
     Optional<Worker> findByUserId(Long userId);

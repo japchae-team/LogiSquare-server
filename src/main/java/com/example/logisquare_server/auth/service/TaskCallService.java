@@ -13,6 +13,7 @@ import com.example.logisquare_server.repository.WorkTaskRepository;
 import com.example.logisquare_server.repository.WorkerRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -24,6 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class TaskCallService {
 
     private static final String CALLED_STATUS = "CALLED";
+    private static final String INBOUND_TASK_TYPE = "INBOUND";
+    private static final String OUTBOUND_TASK_TYPE = "OUTBOUND";
+    private static final List<String> AVAILABLE_WORKER_STATUSES = List.of("AVAILABLE", "ACTIVE", "IDLE");
+    private static final List<String> ACTIVE_ASSIGNMENT_STATUSES = List.of("CALLED", "ACCEPTED");
     private static final int ALARM_TTL_SECONDS = 300;
 
     private final WorkTaskRepository workTaskRepository;
@@ -47,28 +52,110 @@ public class TaskCallService {
     }
 
     @Transactional
-    public TaskCallResponse callWorker(Long taskId) {
-        WorkTask task = workTaskRepository.findById(taskId)
-                .orElseThrow(() -> new TaskCallException("Task not found."));
+    public TaskCallResponse callOutboundWorker(Long taskId) {
+        WorkTask task = findTask(taskId);
+        validateTaskType(task, OUTBOUND_TASK_TYPE);
         StorageLocation taskLocation = resolveTaskLocation(task);
         WifiAccessPoint nearestAccessPoint = findNearestAccessPoint(taskLocation);
-        WorkerSignal strongestSignal = findStrongestWorkerSignal(nearestAccessPoint);
 
-        Optional<TaskAssignment> existingAssignment = taskAssignmentRepository.findByTaskIdAndWorkerId(
-                task.getId(),
-                strongestSignal.worker().getId()
-        );
-        TaskAssignment assignment = existingAssignment.orElseGet(() -> taskAssignmentRepository.save(new TaskAssignment(
-                task,
-                strongestSignal.worker(),
-                CALLED_STATUS,
-                strongestSignal.rssi(),
-                LocalDateTime.now(),
-                null
-        )));
+        Optional<TaskAssignment> activeAssignment = findActiveTaskAssignment(task);
+        if (activeAssignment.isPresent()) {
+            TaskAssignment assignment = activeAssignment.get();
+            return toResponse(
+                    task,
+                    taskLocation,
+                    nearestAccessPoint,
+                    assignment.getWorker(),
+                    assignment.getDistanceScore(),
+                    assignment,
+                    "worker:alarms:" + assignment.getWorker().getId()
+            );
+        }
+
+        WorkerSignal strongestSignal = findStrongestWorkerSignal(nearestAccessPoint);
+        TaskAssignment assignment = createAssignment(task, strongestSignal.worker(), strongestSignal.rssi());
         String alarmKey = createRedisAlarm(strongestSignal.worker(), assignment, task, taskLocation);
 
-        return toResponse(task, taskLocation, nearestAccessPoint, strongestSignal, assignment, alarmKey);
+        return toResponse(
+                task,
+                taskLocation,
+                nearestAccessPoint,
+                strongestSignal.worker(),
+                strongestSignal.rssi(),
+                assignment,
+                alarmKey
+        );
+    }
+
+    @Transactional
+    public List<TaskCallResponse> callInboundWorkers(Long taskId) {
+        WorkTask task = findTask(taskId);
+        validateTaskType(task, INBOUND_TASK_TYPE);
+        StorageLocation taskLocation = resolveTaskLocation(task);
+
+        List<TaskAssignment> activeAssignments = findActiveTaskAssignments(task);
+        if (!activeAssignments.isEmpty()) {
+            return activeAssignments.stream()
+                    .map(assignment -> toResponse(
+                            task,
+                            taskLocation,
+                            null,
+                            assignment.getWorker(),
+                            assignment.getDistanceScore(),
+                            assignment,
+                            "worker:alarms:" + assignment.getWorker().getId()
+                    ))
+                    .toList();
+        }
+
+        List<Worker> workers = findAvailableWorkers();
+        if (workers.isEmpty()) {
+            throw new TaskCallException("No available workers found.");
+        }
+
+        return workers.stream()
+                .map(worker -> {
+                    TaskAssignment assignment = createAssignment(task, worker, null);
+                    String alarmKey = createRedisAlarm(worker, assignment, task, taskLocation);
+                    return toResponse(task, taskLocation, null, worker, null, assignment, alarmKey);
+                })
+                .toList();
+    }
+
+    private WorkTask findTask(Long taskId) {
+        return workTaskRepository.findById(taskId)
+                .orElseThrow(() -> new TaskCallException("Task not found."));
+    }
+
+    private void validateTaskType(WorkTask task, String taskType) {
+        if (!taskType.equals(task.getTaskType())) {
+            throw new TaskCallException("Task is not " + taskType + ".");
+        }
+    }
+
+    private Optional<TaskAssignment> findActiveTaskAssignment(WorkTask task) {
+        return taskAssignmentRepository.findFirstByTaskIdAndStatusInOrderByCalledAtDesc(
+                task.getId(),
+                ACTIVE_ASSIGNMENT_STATUSES
+        );
+    }
+
+    private List<TaskAssignment> findActiveTaskAssignments(WorkTask task) {
+        return taskAssignmentRepository.findAllByTaskIdAndStatusIn(
+                task.getId(),
+                ACTIVE_ASSIGNMENT_STATUSES
+        );
+    }
+
+    private TaskAssignment createAssignment(WorkTask task, Worker worker, Integer distanceScore) {
+        return taskAssignmentRepository.save(new TaskAssignment(
+                task,
+                worker,
+                CALLED_STATUS,
+                distanceScore,
+                LocalDateTime.now(),
+                null
+        ));
     }
 
     private StorageLocation resolveTaskLocation(WorkTask task) {
@@ -103,9 +190,9 @@ public class TaskCallService {
     }
 
     private WorkerSignal findStrongestWorkerSignal(WifiAccessPoint accessPoint) {
-        List<Worker> workers = workerRepository.findAll();
+        List<Worker> workers = findAvailableWorkers();
         if (workers.isEmpty()) {
-            throw new TaskCallException("No workers found.");
+            throw new TaskCallException("No available workers found.");
         }
 
         String redisField = "ap:" + accessPoint.getApCode();
@@ -116,6 +203,17 @@ public class TaskCallService {
                         .comparingInt(WorkerSignal::rssi)
                         .thenComparing(signal -> signal.worker().getId(), Comparator.reverseOrder()))
                 .orElseThrow(() -> new TaskCallException("No worker Wi-Fi RSSI found for " + accessPoint.getApCode() + "."));
+    }
+
+    private List<Worker> findAvailableWorkers() {
+        return workerRepository.findAllByStatusIn(AVAILABLE_WORKER_STATUSES)
+                .stream()
+                .filter(worker -> !hasActiveAssignment(worker.getId(), ACTIVE_ASSIGNMENT_STATUSES))
+                .toList();
+    }
+
+    private boolean hasActiveAssignment(Long workerId, Collection<String> statuses) {
+        return taskAssignmentRepository.existsByWorkerIdAndStatusIn(workerId, statuses);
     }
 
     private Optional<WorkerSignal> readWorkerSignal(Worker worker, String redisField) {
@@ -136,11 +234,11 @@ public class TaskCallService {
             WorkTask task,
             StorageLocation location,
             WifiAccessPoint accessPoint,
-            WorkerSignal signal,
+            Worker worker,
+            Integer rssi,
             TaskAssignment assignment,
             String alarmKey
     ) {
-        Worker worker = signal.worker();
         return new TaskCallResponse(
                 task.getId(),
                 assignment.getId(),
@@ -149,8 +247,8 @@ public class TaskCallService {
                 worker.getEmployeeNo(),
                 worker.getUser().getName(),
                 assignment.getStatus(),
-                accessPoint.getApCode(),
-                signal.rssi(),
+                accessPoint != null ? accessPoint.getApCode() : null,
+                rssi,
                 location.getId(),
                 location.getCode(),
                 location.getPosX(),

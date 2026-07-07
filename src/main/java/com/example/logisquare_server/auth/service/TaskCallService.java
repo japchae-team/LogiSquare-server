@@ -11,6 +11,7 @@ import com.example.logisquare_server.repository.TaskAssignmentRepository;
 import com.example.logisquare_server.repository.WifiAccessPointRepository;
 import com.example.logisquare_server.repository.WorkTaskRepository;
 import com.example.logisquare_server.repository.WorkerRepository;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TaskCallService {
 
     private static final String CALLED_STATUS = "CALLED";
+    private static final int ALARM_TTL_SECONDS = 300;
 
     private final WorkTaskRepository workTaskRepository;
     private final WorkerRepository workerRepository;
@@ -64,8 +66,9 @@ public class TaskCallService {
                 LocalDateTime.now(),
                 null
         )));
+        String alarmKey = createRedisAlarm(strongestSignal.worker(), assignment, task, taskLocation);
 
-        return toResponse(task, taskLocation, nearestAccessPoint, strongestSignal, assignment);
+        return toResponse(task, taskLocation, nearestAccessPoint, strongestSignal, assignment, alarmKey);
     }
 
     private StorageLocation resolveTaskLocation(WorkTask task) {
@@ -134,12 +137,14 @@ public class TaskCallService {
             StorageLocation location,
             WifiAccessPoint accessPoint,
             WorkerSignal signal,
-            TaskAssignment assignment
+            TaskAssignment assignment,
+            String alarmKey
     ) {
         Worker worker = signal.worker();
         return new TaskCallResponse(
                 task.getId(),
                 assignment.getId(),
+                alarmKey,
                 worker.getId(),
                 worker.getEmployeeNo(),
                 worker.getUser().getName(),
@@ -152,6 +157,27 @@ public class TaskCallService {
                 location.getPosY(),
                 assignment.getCalledAt()
         );
+    }
+
+    private String createRedisAlarm(
+            Worker worker,
+            TaskAssignment assignment,
+            WorkTask task,
+            StorageLocation location
+    ) {
+        String itemName = task.getItem() != null ? task.getItem().getName() : "task";
+        String alarmKey = "worker:alarms:" + worker.getId();
+        String alarmValue = "TASK_CALL"
+                + "|assignmentId=" + assignment.getId()
+                + "|taskId=" + task.getId()
+                + "|itemName=" + itemName
+                + "|locationCode=" + location.getCode()
+                + "|calledAt=" + LocalDateTime.now();
+
+        redisTemplate.opsForList().leftPush(alarmKey, alarmValue);
+        redisTemplate.opsForList().trim(alarmKey, 0, 19);
+        redisTemplate.expire(alarmKey, Duration.ofSeconds(ALARM_TTL_SECONDS));
+        return alarmKey;
     }
 
     private int squaredDistance(StorageLocation location, WifiAccessPoint accessPoint) {

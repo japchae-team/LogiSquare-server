@@ -68,4 +68,19 @@ public class TaskAssignment extends BaseTimeEntity {
         this.calledAt = calledAt;
         this.respondedAt = respondedAt;
     }
+
+    public void accept(LocalDateTime respondedAt) {
+        this.status = "ACCEPTED";
+        this.respondedAt = respondedAt;
+    }
+
+    public void reject(LocalDateTime respondedAt) {
+        this.status = "REJECTED";
+        this.respondedAt = respondedAt;
+    }
+
+    public void complete(LocalDateTime respondedAt) {
+        this.status = "COMPLETED";
+        this.respondedAt = respondedAt;
+    }
 }

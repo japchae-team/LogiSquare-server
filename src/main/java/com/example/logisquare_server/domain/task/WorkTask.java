@@ -88,4 +88,14 @@ public class WorkTask extends BaseTimeEntity {
         this.acceptedAt = acceptedAt;
         this.completedAt = completedAt;
     }
+
+    public void markInProgress(LocalDateTime acceptedAt) {
+        this.status = "IN_PROGRESS";
+        this.acceptedAt = acceptedAt;
+    }
+
+    public void complete(LocalDateTime completedAt) {
+        this.status = "COMPLETED";
+        this.completedAt = completedAt;
+    }
 }

@@ -9,6 +9,8 @@ public interface SafetyEventRepository extends JpaRepository<SafetyEvent, Long> 
 
     long countByStatusIn(Collection<String> statuses);
 
+    List<SafetyEvent> findTop5ByStatusInOrderByOccurredAtDesc(Collection<String> statuses);
+
     List<SafetyEvent> findAllByStatus(String status);
 
     List<SafetyEvent> findAllByWorkerId(Long workerId);

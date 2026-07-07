@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 public record TaskCallResponse(
         Long taskId,
         Long assignmentId,
+        String alarmKey,
         Long workerId,
         String employeeNo,
         String workerName,

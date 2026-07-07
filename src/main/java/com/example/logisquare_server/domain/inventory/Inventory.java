@@ -61,4 +61,9 @@ public class Inventory extends BaseTimeEntity {
         this.quantity = quantity;
         this.lastMovedAt = lastMovedAt;
     }
+
+    public void addQuantity(Integer quantity, LocalDateTime movedAt) {
+        this.quantity += quantity;
+        this.lastMovedAt = movedAt;
+    }
 }

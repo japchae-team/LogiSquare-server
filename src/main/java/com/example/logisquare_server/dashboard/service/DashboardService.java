@@ -97,7 +97,7 @@ public class DashboardService {
 
     private List<DashboardInboundItemResponse> getPendingInbounds() {
         return workTaskRepository
-                .findTop5ByTaskTypeAndStatusInOrderByCreatedAtAsc(INBOUND_TASK_TYPE, PENDING_INBOUND_STATUSES)
+                .findAllByTaskTypeAndStatusInOrderByCreatedAtAsc(INBOUND_TASK_TYPE, PENDING_INBOUND_STATUSES)
                 .stream()
                 .map(this::toInboundItem)
                 .toList();

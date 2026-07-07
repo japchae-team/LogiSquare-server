@@ -15,6 +15,8 @@ public interface WorkTaskRepository extends JpaRepository<WorkTask, Long> {
 
     List<WorkTask> findTop5ByTaskTypeAndStatusInOrderByCreatedAtAsc(String taskType, Collection<String> statuses);
 
+    List<WorkTask> findAllByTaskTypeAndStatusInOrderByCreatedAtAsc(String taskType, Collection<String> statuses);
+
     List<WorkTask> findAllByStatus(String status);
 
     List<WorkTask> findAllByRequestedById(Long requestedById);

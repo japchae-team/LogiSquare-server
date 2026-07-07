@@ -4,6 +4,10 @@ import com.example.logisquare_server.domain.location.AreaCode;
 import com.example.logisquare_server.domain.location.StorageGrade;
 
 public record InboundRecommendResponse(
+        Long taskId,
+        String taskStatus,
+        Long itemId,
+        String sku,
         String itemName,
         Integer quantity,
         StorageGrade recommendedGrade,

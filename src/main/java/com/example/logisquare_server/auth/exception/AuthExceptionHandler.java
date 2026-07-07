@@ -22,4 +22,16 @@ public class AuthExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(exception.getMessage()));
     }
+
+    @ExceptionHandler(DevSeedException.class)
+    public ResponseEntity<ErrorResponse> handleDevSeedException(DevSeedException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(exception.getMessage()));
+    }
+
+    @ExceptionHandler(TaskCallException.class)
+    public ResponseEntity<ErrorResponse> handleTaskCallException(TaskCallException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(exception.getMessage()));
+    }
 }

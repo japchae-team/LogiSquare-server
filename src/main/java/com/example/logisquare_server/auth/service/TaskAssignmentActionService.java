@@ -19,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class TaskAssignmentActionService {
 
     private static final String COMPLETED_INBOUND_STATUS = "COMPLETED";
+    private static final String INBOUND_TASK_TYPE = "INBOUND";
+    private static final String OUTBOUND_TASK_TYPE = "OUTBOUND";
 
     private final TaskAssignmentRepository taskAssignmentRepository;
     private final WorkTaskRepository workTaskRepository;
@@ -73,8 +75,7 @@ public class TaskAssignmentActionService {
         LocalDateTime now = LocalDateTime.now();
         task.complete(now);
         assignment.complete(now);
-        reflectInventory(task, now);
-        createInboundRecord(task, assignment, now);
+        reflectInventory(task, assignment, now);
 
         return toResponse(assignment, assignment.getRespondedAt(), now);
     }
@@ -88,15 +89,31 @@ public class TaskAssignmentActionService {
         if (task.getItem() == null) {
             throw new TaskCallException("Task has no item.");
         }
-        if (task.getTargetLocation() == null) {
-            throw new TaskCallException("Task has no target location.");
-        }
         if (task.getQuantity() == null || task.getQuantity() <= 0) {
             throw new TaskCallException("Task quantity must be greater than 0.");
         }
+        if (INBOUND_TASK_TYPE.equals(task.getTaskType()) && task.getTargetLocation() == null) {
+            throw new TaskCallException("Inbound task has no target location.");
+        }
+        if (OUTBOUND_TASK_TYPE.equals(task.getTaskType()) && task.getSourceLocation() == null) {
+            throw new TaskCallException("Outbound task has no source location.");
+        }
+        if (!INBOUND_TASK_TYPE.equals(task.getTaskType()) && !OUTBOUND_TASK_TYPE.equals(task.getTaskType())) {
+            throw new TaskCallException("Unsupported task type.");
+        }
     }
 
-    private void reflectInventory(WorkTask task, LocalDateTime movedAt) {
+    private void reflectInventory(WorkTask task, TaskAssignment assignment, LocalDateTime movedAt) {
+        if (INBOUND_TASK_TYPE.equals(task.getTaskType())) {
+            increaseInventory(task, movedAt);
+            createInboundRecord(task, assignment, movedAt);
+            return;
+        }
+
+        decreaseInventory(task, movedAt);
+    }
+
+    private void increaseInventory(WorkTask task, LocalDateTime movedAt) {
         StorageLocation targetLocation = task.getTargetLocation();
         Inventory inventory = inventoryRepository
                 .findByItemIdAndStorageLocationId(task.getItem().getId(), targetLocation.getId())
@@ -108,6 +125,19 @@ public class TaskAssignmentActionService {
                 )));
 
         inventory.addQuantity(task.getQuantity(), movedAt);
+    }
+
+    private void decreaseInventory(WorkTask task, LocalDateTime movedAt) {
+        StorageLocation sourceLocation = task.getSourceLocation();
+        Inventory inventory = inventoryRepository
+                .findByItemIdAndStorageLocationId(task.getItem().getId(), sourceLocation.getId())
+                .orElseThrow(() -> new TaskCallException("Inventory not found at source location."));
+
+        if (inventory.getQuantity() < task.getQuantity()) {
+            throw new TaskCallException("Not enough inventory at source location.");
+        }
+
+        inventory.subtractQuantity(task.getQuantity(), movedAt);
     }
 
     private void createInboundRecord(WorkTask task, TaskAssignment assignment, LocalDateTime receivedAt) {

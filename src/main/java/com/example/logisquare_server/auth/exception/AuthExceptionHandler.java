@@ -14,4 +14,12 @@ public class AuthExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(new ErrorResponse(exception.getMessage()));
     }
+
+    @ExceptionHandler(DuplicateWorkerAccountException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateWorkerAccountException(
+            DuplicateWorkerAccountException exception
+    ) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(exception.getMessage()));
+    }
 }

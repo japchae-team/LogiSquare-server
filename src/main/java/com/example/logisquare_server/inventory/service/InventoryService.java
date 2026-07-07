@@ -3,6 +3,7 @@ package com.example.logisquare_server.inventory.service;
 import com.example.logisquare_server.domain.inventory.Inventory;
 import com.example.logisquare_server.domain.item.Item;
 import com.example.logisquare_server.domain.location.StorageLocation;
+import com.example.logisquare_server.inventory.dto.InventoryLayoutResponse;
 import com.example.logisquare_server.inventory.dto.InventorySearchResponse;
 import com.example.logisquare_server.inventory.dto.InventorySearchResultResponse;
 import com.example.logisquare_server.inventory.dto.InventorySlotResponse;
@@ -36,7 +37,23 @@ public class InventoryService {
         this.storageLocationRepository = storageLocationRepository;
     }
 
-    public InventorySearchResponse getLayout(String itemName) {
+    public InventoryLayoutResponse getLayout() {
+        List<InventorySearchResultResponse> inventoryItems = getInventoryItems();
+        List<InventorySlotResponse> slots = getSlots(Set.of());
+
+        return new InventoryLayoutResponse(
+                inventoryItems.size(),
+                inventoryItems.stream().mapToInt(InventorySearchResultResponse::quantity).sum(),
+                inventoryItems,
+                slots
+        );
+    }
+
+    public InventorySearchResponse searchByItemName(String itemName) {
+        if (itemName == null || itemName.isBlank()) {
+            throw new InventorySearchException("itemName is required.");
+        }
+
         String keyword = normalizeKeyword(itemName);
         List<InventorySearchResultResponse> inventoryItems = getInventoryItems();
         List<InventorySearchResultResponse> searchResults = filterByKeyword(inventoryItems, keyword);
@@ -55,13 +72,6 @@ public class InventoryService {
                 inventoryItems,
                 slots
         );
-    }
-
-    public InventorySearchResponse searchByItemName(String itemName) {
-        if (itemName == null || itemName.isBlank()) {
-            throw new InventorySearchException("itemName is required.");
-        }
-        return getLayout(itemName);
     }
 
     private List<InventorySearchResultResponse> getInventoryItems() {

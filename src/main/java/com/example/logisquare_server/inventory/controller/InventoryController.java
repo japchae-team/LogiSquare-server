@@ -1,5 +1,6 @@
 package com.example.logisquare_server.inventory.controller;
 
+import com.example.logisquare_server.inventory.dto.InventoryLayoutResponse;
 import com.example.logisquare_server.inventory.dto.InventorySearchResponse;
 import com.example.logisquare_server.inventory.service.InventoryService;
 import org.springframework.http.ResponseEntity;
@@ -19,10 +20,8 @@ public class InventoryController {
     }
 
     @GetMapping("/layout")
-    public ResponseEntity<InventorySearchResponse> getLayout(
-            @RequestParam(required = false) String itemName
-    ) {
-        return ResponseEntity.ok(inventoryService.getLayout(itemName));
+    public ResponseEntity<InventoryLayoutResponse> getLayout() {
+        return ResponseEntity.ok(inventoryService.getLayout());
     }
 
     @GetMapping("/search")

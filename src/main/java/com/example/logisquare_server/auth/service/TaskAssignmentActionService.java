@@ -12,6 +12,7 @@ import com.example.logisquare_server.repository.InventoryRepository;
 import com.example.logisquare_server.repository.TaskAssignmentRepository;
 import com.example.logisquare_server.repository.WorkTaskRepository;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +45,9 @@ public class TaskAssignmentActionService {
     @Transactional
     public TaskActionResponse accept(Long assignmentId) {
         TaskAssignment assignment = findAssignment(assignmentId);
-        taskAssignmentRepository.findAllByTaskIdForUpdate(assignment.getTask().getId());
+        List<TaskAssignment> taskAssignments = taskAssignmentRepository.findAllByTaskIdForUpdate(
+                assignment.getTask().getId()
+        );
         validateAcceptableAssignment(assignment);
 
         LocalDateTime now = LocalDateTime.now();
@@ -52,6 +55,7 @@ public class TaskAssignmentActionService {
         assignment.accept(now);
         assignment.getTask().markInProgress(now);
         assignment.getWorker().markWorking();
+        cancelOtherCalledAssignments(taskAssignments, assignment, now);
 
         return toResponse(assignment, now, null);
     }
@@ -102,6 +106,17 @@ public class TaskAssignmentActionService {
         )) {
             throw new TaskCallException("Task has already been accepted.");
         }
+    }
+
+    private void cancelOtherCalledAssignments(
+            List<TaskAssignment> taskAssignments,
+            TaskAssignment acceptedAssignment,
+            LocalDateTime now
+    ) {
+        taskAssignments.stream()
+                .filter(assignment -> !assignment.getId().equals(acceptedAssignment.getId()))
+                .filter(assignment -> CALLED_ASSIGNMENT_STATUS.equals(assignment.getStatus()))
+                .forEach(assignment -> assignment.cancel(now));
     }
 
     private void validateCompletableTask(WorkTask task) {

@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class TaskAssignmentActionService {
 
+    private static final String CALLED_ASSIGNMENT_STATUS = "CALLED";
+    private static final String ACCEPTED_ASSIGNMENT_STATUS = "ACCEPTED";
     private static final String COMPLETED_INBOUND_STATUS = "COMPLETED";
     private static final String INBOUND_TASK_TYPE = "INBOUND";
     private static final String OUTBOUND_TASK_TYPE = "OUTBOUND";
@@ -42,10 +44,14 @@ public class TaskAssignmentActionService {
     @Transactional
     public TaskActionResponse accept(Long assignmentId) {
         TaskAssignment assignment = findAssignment(assignmentId);
+        taskAssignmentRepository.findAllByTaskIdForUpdate(assignment.getTask().getId());
+        validateAcceptableAssignment(assignment);
+
         LocalDateTime now = LocalDateTime.now();
 
         assignment.accept(now);
         assignment.getTask().markInProgress(now);
+        assignment.getWorker().markWorking();
 
         return toResponse(assignment, now, null);
     }
@@ -75,6 +81,7 @@ public class TaskAssignmentActionService {
         LocalDateTime now = LocalDateTime.now();
         task.complete(now);
         assignment.complete(now);
+        assignment.getWorker().markAvailable();
         reflectInventory(task, assignment, now);
 
         return toResponse(assignment, assignment.getRespondedAt(), now);
@@ -83,6 +90,18 @@ public class TaskAssignmentActionService {
     private TaskAssignment findAssignment(Long assignmentId) {
         return taskAssignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new TaskCallException("Assignment not found."));
+    }
+
+    private void validateAcceptableAssignment(TaskAssignment assignment) {
+        if (!CALLED_ASSIGNMENT_STATUS.equals(assignment.getStatus())) {
+            throw new TaskCallException("Assignment is not callable.");
+        }
+        if (taskAssignmentRepository.existsByTaskIdAndStatus(
+                assignment.getTask().getId(),
+                ACCEPTED_ASSIGNMENT_STATUS
+        )) {
+            throw new TaskCallException("Task has already been accepted.");
+        }
     }
 
     private void validateCompletableTask(WorkTask task) {

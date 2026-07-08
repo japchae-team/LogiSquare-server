@@ -13,10 +13,10 @@ import com.example.logisquare_server.repository.WorkTaskRepository;
 import com.example.logisquare_server.repository.WorkerRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,10 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class TaskCallService {
 
     private static final String CALLED_STATUS = "CALLED";
+    private static final String ACCEPTED_STATUS = "ACCEPTED";
     private static final String INBOUND_TASK_TYPE = "INBOUND";
     private static final String OUTBOUND_TASK_TYPE = "OUTBOUND";
     private static final List<String> AVAILABLE_WORKER_STATUSES = List.of("AVAILABLE", "ACTIVE", "IDLE");
     private static final List<String> ACTIVE_ASSIGNMENT_STATUSES = List.of("CALLED", "ACCEPTED");
+    private static final List<String> BUSY_ASSIGNMENT_STATUSES = List.of("ACCEPTED");
     private static final int ALARM_TTL_SECONDS = 300;
 
     private final WorkTaskRepository workTaskRepository;
@@ -94,7 +96,7 @@ public class TaskCallService {
         StorageLocation taskLocation = resolveTaskLocation(task);
 
         List<TaskAssignment> activeAssignments = findActiveTaskAssignments(task);
-        if (!activeAssignments.isEmpty()) {
+        if (hasAcceptedAssignment(activeAssignments)) {
             return activeAssignments.stream()
                     .map(assignment -> toResponse(
                             task,
@@ -109,14 +111,28 @@ public class TaskCallService {
         }
 
         List<Worker> workers = findAvailableWorkers();
-        if (workers.isEmpty()) {
+        List<TaskAssignment> newAssignments = workers.stream()
+                .filter(worker -> activeAssignments.stream()
+                        .noneMatch(assignment -> assignment.getWorker().getId().equals(worker.getId())))
+                .map(worker -> createAssignment(task, worker, null))
+                .toList();
+        List<TaskAssignment> callAssignments = concatAssignments(activeAssignments, newAssignments);
+
+        if (callAssignments.isEmpty()) {
             throw new TaskCallException("No available workers found.");
         }
 
-        return workers.stream()
-                .map(worker -> {
-                    TaskAssignment assignment = createAssignment(task, worker, null);
-                    String alarmKey = createRedisAlarm(worker, assignment, task, taskLocation);
+        Set<Long> newAssignmentIds = newAssignments.stream()
+                .map(TaskAssignment::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        return callAssignments.stream()
+                .map(assignment -> {
+                    Worker worker = assignment.getWorker();
+                    String alarmKey = "worker:alarms:" + worker.getId();
+                    if (newAssignmentIds.contains(assignment.getId())) {
+                        alarmKey = createRedisAlarm(worker, assignment, task, taskLocation);
+                    }
                     return toResponse(task, taskLocation, null, worker, null, assignment, alarmKey);
                 })
                 .toList();
@@ -145,6 +161,20 @@ public class TaskCallService {
                 task.getId(),
                 ACTIVE_ASSIGNMENT_STATUSES
         );
+    }
+
+    private boolean hasAcceptedAssignment(List<TaskAssignment> assignments) {
+        return assignments.stream()
+                .anyMatch(assignment -> ACCEPTED_STATUS.equals(assignment.getStatus()));
+    }
+
+    private List<TaskAssignment> concatAssignments(
+            List<TaskAssignment> existingAssignments,
+            List<TaskAssignment> newAssignments
+    ) {
+        return java.util.stream.Stream
+                .concat(existingAssignments.stream(), newAssignments.stream())
+                .toList();
     }
 
     private TaskAssignment createAssignment(WorkTask task, Worker worker, Integer distanceScore) {
@@ -208,12 +238,12 @@ public class TaskCallService {
     private List<Worker> findAvailableWorkers() {
         return workerRepository.findAllByStatusIn(AVAILABLE_WORKER_STATUSES)
                 .stream()
-                .filter(worker -> !hasActiveAssignment(worker.getId(), ACTIVE_ASSIGNMENT_STATUSES))
+                .filter(worker -> !hasBusyAssignment(worker.getId()))
                 .toList();
     }
 
-    private boolean hasActiveAssignment(Long workerId, Collection<String> statuses) {
-        return taskAssignmentRepository.existsByWorkerIdAndStatusIn(workerId, statuses);
+    private boolean hasBusyAssignment(Long workerId) {
+        return taskAssignmentRepository.existsByWorkerIdAndStatusIn(workerId, BUSY_ASSIGNMENT_STATUSES);
     }
 
     private Optional<WorkerSignal> readWorkerSignal(Worker worker, String redisField) {

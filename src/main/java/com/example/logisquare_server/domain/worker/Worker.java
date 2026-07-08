@@ -40,4 +40,12 @@ public class Worker extends BaseTimeEntity {
         this.employeeNo = employeeNo;
         this.status = status;
     }
+
+    public void markWorking() {
+        this.status = "WORKING";
+    }
+
+    public void markAvailable() {
+        this.status = "AVAILABLE";
+    }
 }

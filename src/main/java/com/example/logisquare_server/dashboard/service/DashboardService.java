@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class DashboardService {
 
     private static final String INBOUND_TASK_TYPE = "INBOUND";
+    private static final String ACCEPTED_ASSIGNMENT_STATUS = "ACCEPTED";
     private static final List<String> IN_PROGRESS_TASK_STATUSES = List.of("IN_PROGRESS", "PROCESSING", "ACCEPTED");
     private static final List<String> AVAILABLE_WORKER_STATUSES = List.of("AVAILABLE", "ACTIVE", "IDLE");
     private static final List<String> SAFETY_VIOLATION_STATUSES = List.of(
@@ -46,7 +47,11 @@ public class DashboardService {
                 workTaskRepository.countByStatusIn(IN_PROGRESS_TASK_STATUSES),
                 workerRepository.countByStatusIn(AVAILABLE_WORKER_STATUSES),
                 safetyEventRepository.countByStatusIn(SAFETY_VIOLATION_STATUSES),
-                workTaskRepository.countByTaskTypeAndStatusIn(INBOUND_TASK_TYPE, PENDING_INBOUND_STATUSES),
+                workTaskRepository.countPendingTasksWithoutAcceptedAssignment(
+                        INBOUND_TASK_TYPE,
+                        PENDING_INBOUND_STATUSES,
+                        ACCEPTED_ASSIGNMENT_STATUS
+                ),
                 getInProgressTasks(),
                 getAvailableWorkers(),
                 getSafetyViolations(),
@@ -97,7 +102,11 @@ public class DashboardService {
 
     private List<DashboardInboundItemResponse> getPendingInbounds() {
         return workTaskRepository
-                .findAllByTaskTypeAndStatusInOrderByCreatedAtAsc(INBOUND_TASK_TYPE, PENDING_INBOUND_STATUSES)
+                .findPendingTasksWithoutAcceptedAssignmentOrderByCreatedAtAsc(
+                        INBOUND_TASK_TYPE,
+                        PENDING_INBOUND_STATUSES,
+                        ACCEPTED_ASSIGNMENT_STATUS
+                )
                 .stream()
                 .map(this::toInboundItem)
                 .toList();

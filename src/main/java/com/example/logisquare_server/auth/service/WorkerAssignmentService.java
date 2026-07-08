@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class WorkerAssignmentService {
 
+    private static final String CANCELED_ASSIGNMENT_STATUS = "CANCELED";
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TaskAssignmentRepository taskAssignmentRepository;
     private final WorkerRepository workerRepository;
@@ -40,6 +42,7 @@ public class WorkerAssignmentService {
     public List<WorkerAssignmentResponse> getAssignments(Long workerId) {
         return taskAssignmentRepository.findAllByWorkerId(workerId)
                 .stream()
+                .filter(assignment -> !CANCELED_ASSIGNMENT_STATUS.equals(assignment.getStatus()))
                 .map(this::toResponse)
                 .toList();
     }

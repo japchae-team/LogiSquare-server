@@ -151,7 +151,6 @@ public class InventoryService {
                 .sum();
         List<String> itemNames = inventories.stream()
                 .map(inventory -> inventory.getItem().getName())
-                .distinct()
                 .sorted()
                 .toList();
 

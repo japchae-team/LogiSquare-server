@@ -34,5 +34,7 @@ public interface StorageLocationRepository extends JpaRepository<StorageLocation
 
     Optional<StorageLocation> findByCode(String code);
 
+    Optional<StorageLocation> findFirstByActiveTrueOrderByIdAsc();
+
     boolean existsByCode(String code);
 }

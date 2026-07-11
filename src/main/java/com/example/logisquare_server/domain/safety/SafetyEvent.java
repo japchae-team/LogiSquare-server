@@ -132,4 +132,20 @@ public class SafetyEvent extends BaseTimeEntity {
         this.occurredAt = occurredAt;
         this.resolvedAt = resolvedAt;
     }
+
+    public void assignWorker(Worker worker, User assignedBy, LocalDateTime assignedAt) {
+        this.worker = worker;
+        this.assignedBy = assignedBy;
+        this.assignedAt = assignedAt;
+        if (!"RESOLVED".equals(this.status)) {
+            this.status = "ASSIGNED";
+        }
+    }
+
+    public void resolve(User resolvedBy, String resolutionMemo, LocalDateTime resolvedAt) {
+        this.resolvedBy = resolvedBy;
+        this.resolutionMemo = resolutionMemo;
+        this.resolvedAt = resolvedAt;
+        this.status = "RESOLVED";
+    }
 }

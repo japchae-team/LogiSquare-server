@@ -14,6 +14,8 @@ public record WorkerAssignmentResponse(
         String sourceLocationCode,
         Long targetLocationId,
         String targetLocationCode,
-        LocalDateTime calledAt
+        LocalDateTime calledAt,
+        LocalDateTime respondedAt,
+        LocalDateTime completedAt
 ) {
 }

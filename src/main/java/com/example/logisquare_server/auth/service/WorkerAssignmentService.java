@@ -94,7 +94,9 @@ public class WorkerAssignmentService {
                 sourceLocation != null ? sourceLocation.getCode() : null,
                 targetLocation != null ? targetLocation.getId() : null,
                 targetLocation != null ? targetLocation.getCode() : null,
-                assignment.getCalledAt()
+                assignment.getCalledAt(),
+                assignment.getRespondedAt(),
+                task.getCompletedAt()
         );
     }
 }

@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,10 @@ public class AttendanceService {
             "월", 30L, "MONTH", 30L,
             "년", 365L, "YEAR", 365L
     );
+
+    // 입고 호출은 가용 작업자 전체에게 TaskAssignment가 생기므로, 상태를 안 보고 세면
+    // 거절한 작업자나 다른 작업자가 완료한 작업까지 이 작업자 실적으로 잡힌다.
+    private static final Set<String> ACCEPTED_OR_LATER = Set.of("ACCEPTED", "COMPLETED");
 
     private final WorkerRepository workerRepository;
     private final TaskAssignmentRepository taskAssignmentRepository;
@@ -55,10 +60,12 @@ public class AttendanceService {
 
     private WorkerAttendanceStatsResponse toResponse(Worker worker, LocalDateTime rangeStart, LocalDateTime rangeEnd) {
         long callAccepted = taskAssignmentRepository.findAllByWorkerId(worker.getId()).stream()
+                .filter(a -> ACCEPTED_OR_LATER.contains(a.getStatus()))
                 .filter(a -> a.getRespondedAt() != null && isWithin(a.getRespondedAt(), rangeStart, rangeEnd))
                 .count();
 
         long tasksHandled = taskAssignmentRepository.findAllByWorkerId(worker.getId()).stream()
+                .filter(a -> "COMPLETED".equals(a.getStatus()))
                 .filter(a -> a.getTask().getCompletedAt() != null && isWithin(a.getTask().getCompletedAt(), rangeStart, rangeEnd))
                 .count();
 

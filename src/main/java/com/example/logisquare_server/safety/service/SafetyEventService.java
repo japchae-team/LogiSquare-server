@@ -21,10 +21,15 @@ import com.example.logisquare_server.safety.dto.NotifyNearbyWorkersRequest;
 import com.example.logisquare_server.safety.dto.NotifyNearbyWorkersResponse;
 import com.example.logisquare_server.safety.dto.ResolveSafetyEventRequest;
 import com.example.logisquare_server.safety.dto.SafetyEventActionResponse;
+import com.example.logisquare_server.safety.dto.SafetyEventCaptureImageResponse;
 import com.example.logisquare_server.safety.dto.SafetyEventDetailResponse;
 import com.example.logisquare_server.safety.dto.SafetyEventListResponse;
 import com.example.logisquare_server.safety.dto.SafetyEventSummaryResponse;
 import com.example.logisquare_server.safety.exception.SafetyEventException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -45,6 +50,8 @@ public class SafetyEventService {
     private static final int DEFAULT_NOTIFY_WORKER_COUNT = 5;
     private static final int MAX_NOTIFY_WORKER_COUNT = 20;
     private static final int ALARM_TTL_SECONDS = 300;
+    private static final Duration CAPTURE_IMAGE_TIMEOUT = Duration.ofSeconds(5);
+    private static final String DEFAULT_IMAGE_CONTENT_TYPE = "image/jpeg";
 
     private final SafetyEventRepository safetyEventRepository;
     private final CctvCameraRepository cctvCameraRepository;
@@ -53,6 +60,10 @@ public class SafetyEventService {
     private final UserRepository userRepository;
     private final WifiAccessPointRepository wifiAccessPointRepository;
     private final StringRedisTemplate redisTemplate;
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(CAPTURE_IMAGE_TIMEOUT)
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
 
     public SafetyEventService(
             SafetyEventRepository safetyEventRepository,
@@ -90,6 +101,35 @@ public class SafetyEventService {
     @Transactional(readOnly = true)
     public SafetyEventDetailResponse getEvent(Long eventId) {
         return toDetailResponse(findEvent(eventId));
+    }
+
+    @Transactional(readOnly = true)
+    public SafetyEventCaptureImageResponse getCaptureImage(Long eventId) {
+        SafetyEvent event = findEvent(eventId);
+        String captureUrl = event.getCaptureUrl();
+        if (!hasText(captureUrl)) {
+            throw new SafetyEventException("Capture image URL does not exist.");
+        }
+
+        HttpRequest request = HttpRequest.newBuilder(toCaptureUri(captureUrl))
+                .timeout(CAPTURE_IMAGE_TIMEOUT)
+                .GET()
+                .build();
+
+        try {
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new SafetyEventException("Failed to load capture image.");
+            }
+            return new SafetyEventCaptureImageResponse(
+                    response.body(),
+                    response.headers().firstValue("content-type").orElse(DEFAULT_IMAGE_CONTENT_TYPE)
+            );
+        } catch (SafetyEventException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new SafetyEventException("Failed to load capture image.");
+        }
     }
 
     @Transactional
@@ -156,7 +196,7 @@ public class SafetyEventService {
         AiCctvSafetyEventData payload = request.payload();
         StorageContext storageContext = resolveStorageContext(payload);
         LocalDateTime occurredAt = payload.occurredAt() != null ? payload.occurredAt() : LocalDateTime.now();
-        String status = resolveStatus(payload.helmetWorn(), payload.vestWorn());
+        String status = resolveStatus(payload.eventType(), payload.helmetWorn(), payload.vestWorn());
 
         SafetyEvent safetyEvent = safetyEventRepository.save(new SafetyEvent(
                 null,
@@ -167,8 +207,8 @@ public class SafetyEventService {
                 status,
                 payload.annotatedImageUrl(),
                 payload.confidenceScore(),
-                payload.helmetWorn(),
-                payload.vestWorn(),
+                resolveHelmetWorn(payload.eventType(), payload.helmetWorn()),
+                resolveVestWorn(payload.eventType(), payload.vestWorn()),
                 null,
                 null,
                 null,
@@ -301,7 +341,7 @@ public class SafetyEventService {
                 location.getId(),
                 location.getCode(),
                 location.getName(),
-                event.getCaptureUrl(),
+                toCaptureImageUrl(event),
                 worker != null ? worker.getId() : null,
                 worker != null ? worker.getEmployeeNo() : null,
                 worker != null ? worker.getUser().getName() : null,
@@ -324,7 +364,7 @@ public class SafetyEventService {
                 event.getSourceType(),
                 event.getStatus(),
                 toStatusLabel(event.getStatus()),
-                event.getCaptureUrl(),
+                toCaptureImageUrl(event),
                 event.getConfidenceScore(),
                 event.getHelmetWorn(),
                 event.getVestWorn(),
@@ -395,11 +435,34 @@ public class SafetyEventService {
         return new StorageContext(defaultLocation, null);
     }
 
-    private String resolveStatus(Boolean helmetWorn, Boolean vestWorn) {
-        if (Boolean.FALSE.equals(helmetWorn) || Boolean.FALSE.equals(vestWorn)) {
+    private String resolveStatus(String eventType, Boolean helmetWorn, Boolean vestWorn) {
+        if (isViolationEventType(eventType) || Boolean.FALSE.equals(helmetWorn) || Boolean.FALSE.equals(vestWorn)) {
             return DETECTED_STATUS;
         }
         return CLEAR_STATUS;
+    }
+
+    private Boolean resolveHelmetWorn(String eventType, Boolean helmetWorn) {
+        if ("NO_HELMET".equals(eventType) || "HELMET_NOT_DETECTED".equals(eventType)) {
+            return false;
+        }
+        return helmetWorn;
+    }
+
+    private Boolean resolveVestWorn(String eventType, Boolean vestWorn) {
+        if ("NO_VEST".equals(eventType) || "VEST_NOT_DETECTED".equals(eventType)) {
+            return false;
+        }
+        return vestWorn;
+    }
+
+    private boolean isViolationEventType(String eventType) {
+        return "DANGER_ZONE_ENTRY".equals(eventType)
+                || "PPE_MISSING".equals(eventType)
+                || "NO_HELMET".equals(eventType)
+                || "HELMET_NOT_DETECTED".equals(eventType)
+                || "NO_VEST".equals(eventType)
+                || "VEST_NOT_DETECTED".equals(eventType);
     }
 
     private boolean isActiveStatus(String status) {
@@ -408,25 +471,50 @@ public class SafetyEventService {
 
     private String toEventTypeLabel(String eventType) {
         if ("DANGER_ZONE_ENTRY".equals(eventType)) {
-            return "위험구역 침입";
+            return "\uC704\uD5D8\uAD6C\uC5ED \uCE68\uC785";
         }
-        if ("SAFETY_GEAR_CHECK".equals(eventType) || "PPE_MISSING".equals(eventType)) {
-            return "보호장비 미착용";
+        if ("SAFETY_GEAR_CHECK".equals(eventType)
+                || "PPE_MISSING".equals(eventType)
+                || "NO_HELMET".equals(eventType)
+                || "HELMET_NOT_DETECTED".equals(eventType)
+                || "NO_VEST".equals(eventType)
+                || "VEST_NOT_DETECTED".equals(eventType)) {
+            return "\uBCF4\uD638\uC7A5\uBE44 \uBBF8\uCC29\uC6A9";
         }
         return eventType;
     }
 
     private String toStatusLabel(String status) {
         if ("DETECTED".equals(status) || "OPEN".equals(status) || "VIOLATION".equals(status)) {
-            return "진행 중";
+            return "\uC9C4\uD589 \uC911";
         }
         if ("ASSIGNED".equals(status)) {
-            return "작업자 지정";
+            return "\uC791\uC5C5\uC790 \uC9C0\uC815";
         }
         if (RESOLVED_STATUS.equals(status) || CLEAR_STATUS.equals(status)) {
-            return "조치 완료";
+            return "\uC870\uCE58 \uC644\uB8CC";
         }
         return status;
+    }
+
+    private URI toCaptureUri(String captureUrl) {
+        try {
+            URI uri = URI.create(captureUrl);
+            String scheme = uri.getScheme();
+            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+                throw new SafetyEventException("Unsupported capture image URL.");
+            }
+            return uri;
+        } catch (IllegalArgumentException exception) {
+            throw new SafetyEventException("Invalid capture image URL.");
+        }
+    }
+
+    private String toCaptureImageUrl(SafetyEvent event) {
+        if (!hasText(event.getCaptureUrl())) {
+            return null;
+        }
+        return "/api/safety/events/" + event.getId() + "/capture-image";
     }
 
     private String defaultIfBlank(String value, String defaultValue) {

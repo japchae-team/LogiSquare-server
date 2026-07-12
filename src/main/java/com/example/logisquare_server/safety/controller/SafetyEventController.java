@@ -7,10 +7,14 @@ import com.example.logisquare_server.safety.dto.NotifyNearbyWorkersRequest;
 import com.example.logisquare_server.safety.dto.NotifyNearbyWorkersResponse;
 import com.example.logisquare_server.safety.dto.ResolveSafetyEventRequest;
 import com.example.logisquare_server.safety.dto.SafetyEventActionResponse;
+import com.example.logisquare_server.safety.dto.SafetyEventCaptureImageResponse;
 import com.example.logisquare_server.safety.dto.SafetyEventDetailResponse;
 import com.example.logisquare_server.safety.dto.SafetyEventListResponse;
 import com.example.logisquare_server.safety.service.SafetyEventService;
+import java.time.Duration;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -43,6 +47,15 @@ public class SafetyEventController {
     @GetMapping("/{eventId}")
     public ResponseEntity<SafetyEventDetailResponse> getEvent(@PathVariable Long eventId) {
         return ResponseEntity.ok(safetyEventService.getEvent(eventId));
+    }
+
+    @GetMapping("/{eventId}/capture-image")
+    public ResponseEntity<byte[]> getCaptureImage(@PathVariable Long eventId) {
+        SafetyEventCaptureImageResponse response = safetyEventService.getCaptureImage(eventId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(response.contentType()))
+                .cacheControl(CacheControl.maxAge(Duration.ofMinutes(10)))
+                .body(response.imageBytes());
     }
 
     @PatchMapping("/{eventId}/assign-worker")
